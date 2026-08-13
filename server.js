@@ -4,20 +4,17 @@ const dotenv = require('dotenv');
 const connectDB = require('./config/db');
 const { errorHandler } = require('./middleware/errorMiddleware');
 
-// Load environment variables
 dotenv.config();
 
-// Connect to Database
 connectDB();
+
 
 const app = express();
 
-// Standard Middlewares
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Logging Request Middleware (Development Mode)
 if (process.env.NODE_ENV !== 'production') {
   app.use((req, res, next) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
@@ -25,7 +22,6 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
-// Mount API routes
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/user', require('./routes/userRoutes'));
 app.use('/api/expenses', require('./routes/expenseRoutes'));

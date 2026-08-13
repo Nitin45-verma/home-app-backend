@@ -16,7 +16,6 @@ const onboardUser = async (req, res, next) => {
 
     const { name, monthlyBudget, preferredLanguage, savingsName, savingsTarget, savingsAchieved } = req.body;
 
-    // Validate inputs if needed, though they might be empty initially
     user.name = name !== undefined ? name : user.name;
     user.monthlyBudget = monthlyBudget !== undefined ? Number(monthlyBudget) : user.monthlyBudget;
     user.preferredLanguage = preferredLanguage !== undefined ? preferredLanguage : user.preferredLanguage;
