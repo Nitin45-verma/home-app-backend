@@ -1,0 +1,3 @@
+{"_e":"root:init","_t":1783498746128,"format":"v0-jsonl","version":"56.1.16"}
+{"_e":"env:mode","_t":1783498746129,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1783498746135,"mode":"development","files":["../..\\..\\.env"],"env":{"JWT_SECRET":"b64f33a82ee146d9b4bfa4f3bc47debe25227d8cf5efc4e97669d5ad5b6df8d0","MONGODB_URI":"mongodb://127.0.0.1:27017/housewives","PORT":"5000"}}
