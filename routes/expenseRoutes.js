@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const { addExpense, getMonthlyExpenses, voiceParseExpense, scanBill } = require('../controllers/expenseController');
+const { addExpense, getMonthlyExpenses, voiceParseExpense, scanBill, scanDiary, bulkSaveExpenses } = require('../controllers/expenseController');
 const { protect } = require('../middleware/authMiddleware');
 
 // Configure multer memory storage
@@ -17,5 +17,7 @@ router.post('/', protect, addExpense);
 router.get('/monthly', protect, getMonthlyExpenses);
 router.post('/voice-parse', protect, voiceParseExpense);
 router.post('/scan-bill', protect, upload.single('bill'), scanBill);
+router.post('/scan-diary', protect, upload.single('diary'), scanDiary);
+router.post('/bulk-save', protect, bulkSaveExpenses);
 
 module.exports = router;

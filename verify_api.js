@@ -227,11 +227,57 @@ async function runTests() {
       console.warn('    ⚠️ Warning: OCR Extracted values did not match expected values.');
     }
 
+    // 8. Handwritten AI Diary Scanner Test (/api/expenses/scan-diary)
+    console.log('\n8. Testing Handwritten AI Diary Scanner API (/api/expenses/scan-diary)...');
+    const diaryForm = new FormData();
+    const mockDiaryContent = `31/3 - 100 - अदरक सब्जी\n30/3 - 40 - केला\n1/4 - 120 - दूध\n1/4 - 2500 - बिजली बिल`;
+    const diaryBlob = new Blob([mockDiaryContent], { type: 'image/jpeg' });
+    diaryForm.append('diary', diaryBlob, 'handwritten_diary.jpg');
+
+    const diaryRes = await request('/api/expenses/scan-diary', {
+      method: 'POST',
+      body: diaryForm
+    });
+
+    if (!diaryRes.ok) {
+      throw new Error(`Diary scanner API request failed: ${JSON.stringify(diaryRes.data)}`);
+    }
+
+    const diaryData = diaryRes.data;
+    console.log('  Response:', diaryData);
+    if (diaryData.success && Array.isArray(diaryData.expenses) && diaryData.expenses.length >= 2) {
+      console.log(`    ✓ Handwritten AI Diary Scanner parsed ${diaryData.expenses.length} expense rows successfully!`);
+      console.log(`    Sample parsed row 0:`, diaryData.expenses[0]);
+    } else {
+      throw new Error('Handwritten AI Diary Scanner failed to return parsed expense array');
+    }
+
+    // 9. Bulk Save API Test (/api/expenses/bulk-save)
+    console.log('\n9. Testing Bulk Save API (/api/expenses/bulk-save)...');
+    const bulkSaveRes = await request('/api/expenses/bulk-save', {
+      method: 'POST',
+      body: JSON.stringify({
+        expenses: diaryData.expenses
+      })
+    });
+
+    if (!bulkSaveRes.ok) {
+      throw new Error(`Bulk save API request failed: ${JSON.stringify(bulkSaveRes.data)}`);
+    }
+
+    const bulkData = bulkSaveRes.data;
+    console.log('  Response:', bulkData);
+    if (bulkData.success && bulkData.savedCount === diaryData.expenses.length) {
+      console.log(`    ✓ Bulk save API successfully committed ${bulkData.savedCount} items to MongoDB and updated reward points!`);
+    } else {
+      throw new Error('Bulk save API failed to match saved item count');
+    }
+
     console.log('\n✨ ALL ADVANCED API ENDPOINTS COMPLETED SUCCESSFULLY! ✨');
 
   } catch (error) {
     console.error('\n❌ VERIFICATION TEST FAILED:');
-    console.error(error.message);
+    console.error(error.stack || error);
   }
 }
 
