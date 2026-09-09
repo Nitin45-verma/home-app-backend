@@ -35,7 +35,7 @@ app.use('/api/savings', require('./routes/savingsRoutes'));
 
 // Root Endpoint for health check
 app.get('/health', (req, res) => {
-  res.status(200).json({ success: true, status: 'API is running smoothly' });
+  res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
 // Bind Error Handling Middleware
@@ -44,7 +44,7 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 4000;
 
 const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Backend server listening on 0.0.0.0:${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
+  console.log(`Production API running on 0.0.0.0:${PORT}`);
 });
 
 // Handle unhandled promise rejections
