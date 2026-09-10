@@ -312,24 +312,57 @@ const loginUser = async (req, res, next) => {
  * @desc    Authenticate with Google OAuth 2.0
  * @route   POST /api/auth/google
  * @access  Public
+ *
+ * IMPORTANT: GOOGLE_CLIENT_ID must be set in the .env file.
+ * If GOOGLE_CLIENT_ID is undefined, verifyIdToken will always throw.
+ *
+ * The frontend sends: POST /api/auth/google  { idToken: "<google_id_token>" }
  */
 const googleAuth = async (req, res, next) => {
   try {
-    const { idToken } = req.body;
-    if (!idToken) {
+    // Validate GOOGLE_CLIENT_ID is configured
+    if (!process.env.GOOGLE_CLIENT_ID) {
+      console.error('[googleAuth] GOOGLE_CLIENT_ID is not set in environment variables!');
+      res.status(500);
+      throw new Error('Server misconfiguration: GOOGLE_CLIENT_ID is missing');
+    }
+
+    const { idToken, credential } = req.body;
+    // Accept both field names (idToken or credential) for flexibility
+    const googleToken = idToken || credential;
+
+    if (!googleToken) {
       res.status(400);
       throw new Error('Google ID token is required / Google ID टोकन आवश्यक है');
     }
 
-    const ticket = await client.verifyIdToken({
-      idToken,
-      audience: process.env.GOOGLE_CLIENT_ID,
-    });
-    
-    const payload = ticket.getPayload();
+    // Verify the Google ID token
+    let payload;
+    try {
+      const ticket = await client.verifyIdToken({
+        idToken: googleToken,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+      payload = ticket.getPayload();
+    } catch (verifyError) {
+      console.error('[googleAuth] Token verification failed:', verifyError.message);
+      res.status(400);
+      throw new Error(`Invalid or expired Google token: ${verifyError.message}`);
+    }
+
+    if (!payload) {
+      res.status(400);
+      throw new Error('Could not extract payload from Google token');
+    }
+
     const { sub: googleId, email, name, picture } = payload;
 
-    // Find user by googleId or email
+    if (!email) {
+      res.status(400);
+      throw new Error('Google account does not have a verified email address');
+    }
+
+    // Find existing user by googleId or email, create if new
     let user = await User.findOne({ $or: [{ googleId }, { emailPhone: email }] });
 
     if (!user) {
@@ -344,11 +377,15 @@ const googleAuth = async (req, res, next) => {
         isEmailVerified: true,
         isFirstTimeUser: true,
       });
+      console.log(`[googleAuth] New Google user created: ${email}`);
     } else {
       let isUpdated = false;
       if (!user.googleId) { user.googleId = googleId; isUpdated = true; }
       if (!user.avatar && picture) { user.avatar = picture; isUpdated = true; }
+      if (user.authProvider !== 'google') { user.authProvider = 'google'; isUpdated = true; }
+      if (!user.isEmailVerified) { user.isEmailVerified = true; isUpdated = true; }
       if (isUpdated) await user.save();
+      console.log(`[googleAuth] Existing user logged in via Google: ${email}`);
     }
 
     const token = generateToken(user._id);
@@ -360,9 +397,16 @@ const googleAuth = async (req, res, next) => {
       user: formatUserResponse(user),
     });
   } catch (error) {
-    console.error('Google Auth Verification Error:', error);
-    res.status(401);
-    next(new Error('Invalid or expired Google token / अमान्य या समाप्त Google टोकन'));
+    // Status code is already set by the inner blocks above (400 or 500).
+    // If somehow it got to here with 200 still set, default to 500 (server error).
+    if (!res.headersSent) {
+      const currentStatus = res.statusCode;
+      if (!currentStatus || currentStatus === 200) {
+        res.status(500);
+      }
+    }
+    console.error('[googleAuth] Error:', error.message);
+    next(error);
   }
 };
 
