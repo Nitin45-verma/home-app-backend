@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const bcrypt = require('bcryptjs');
 
 /**
  * @desc    Collect first-time user data and complete onboarding
@@ -81,12 +82,14 @@ const updateUserProfile = async (req, res, next) => {
       preferredLanguage,
       savingsName,
       savingsTarget,
-      savingsAchieved
+      savingsAchieved,
+      avatar
     } = req.body;
 
-    user.name = name !== undefined ? name : user.name;
+    user.name = name !== undefined ? name.trim() : user.name;
     user.monthlyBudget = monthlyBudget !== undefined ? Number(monthlyBudget) : user.monthlyBudget;
     user.preferredLanguage = preferredLanguage !== undefined ? preferredLanguage : user.preferredLanguage;
+    if (avatar !== undefined) user.avatar = avatar;
     
     // Savings parameters
     user.savingsName = savingsName !== undefined ? savingsName : user.savingsName;
@@ -184,10 +187,55 @@ const spinWheel = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Change User Password
+ * @route   PUT /api/user/change-password
+ * @access  Private
+ */
+const changeUserPassword = async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      res.status(404);
+      throw new Error('User not found');
+    }
+
+    if (user.authProvider === 'google') {
+      res.status(400);
+      throw new Error('Google-authenticated accounts do not use a local password');
+    }
+
+    if (!currentPassword || !newPassword) {
+      res.status(400);
+      throw new Error('Please provide current and new password');
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      res.status(401);
+      throw new Error('Incorrect current password');
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Password changed successfully',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   onboardUser,
   getUserProfile,
   updateUserProfile,
   completeOnboarding,
-  spinWheel
+  spinWheel,
+  changeUserPassword
 };
