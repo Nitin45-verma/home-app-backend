@@ -76,6 +76,11 @@ const UserSchema = new mongoose.Schema({
     default: null
   },
 
+  // Google Auth Fields
+  googleId: { type: String, default: null },
+  avatar: { type: String, default: '' },
+  authProvider: { type: String, enum: ['local', 'google'], default: 'local' },
+
   // Savings Goal Fields to align with the Dashboard & Profile screens
   savingsName: {
     type: String,

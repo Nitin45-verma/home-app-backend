@@ -2,6 +2,9 @@ const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const User = require('../models/User');
 const { sendVerificationEmail } = require('../utils/emailService');
+const { OAuth2Client } = require('google-auth-library');
+
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // Generate JWT Helper
 const generateToken = (id) => {
@@ -18,6 +21,8 @@ const formatUserResponse = (user) => ({
   userId: user.userId,
   name: user.name,
   emailPhone: user.emailPhone,
+  avatar: user.avatar,
+  authProvider: user.authProvider,
   monthlyBudget: user.monthlyBudget,
   preferredLanguage: user.preferredLanguage,
   isFirstTimeUser: user.isFirstTimeUser,
@@ -301,6 +306,64 @@ const loginUser = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Authenticate with Google OAuth 2.0
+ * @route   POST /api/auth/google
+ * @access  Public
+ */
+const googleAuth = async (req, res, next) => {
+  try {
+    const { idToken } = req.body;
+    if (!idToken) {
+      res.status(400);
+      throw new Error('Google ID token is required / Google ID टोकन आवश्यक है');
+    }
+
+    const ticket = await client.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    
+    const payload = ticket.getPayload();
+    const { sub: googleId, email, name, picture } = payload;
+
+    // Find user by googleId or email
+    let user = await User.findOne({ $or: [{ googleId }, { emailPhone: email }] });
+
+    if (!user) {
+      const generatedUserId = uuidv4();
+      user = await User.create({
+        userId: generatedUserId,
+        name: name || 'User',
+        emailPhone: email,
+        googleId,
+        avatar: picture || '',
+        authProvider: 'google',
+        isEmailVerified: true,
+        isFirstTimeUser: true,
+      });
+    } else {
+      let isUpdated = false;
+      if (!user.googleId) { user.googleId = googleId; isUpdated = true; }
+      if (!user.avatar && picture) { user.avatar = picture; isUpdated = true; }
+      if (isUpdated) await user.save();
+    }
+
+    const token = generateToken(user._id);
+
+    return res.status(200).json({
+      success: true,
+      token,
+      isFirstTimeUser: user.isFirstTimeUser,
+      user: formatUserResponse(user),
+    });
+  } catch (error) {
+    console.error('Google Auth Verification Error:', error);
+    res.status(401);
+    next(new Error('Invalid or expired Google token / अमान्य या समाप्त Google टोकन'));
+  }
+};
+
 module.exports = {
   sendEmailOtp,
   verifyEmailOtp,
@@ -308,4 +371,5 @@ module.exports = {
   loginRegister,
   registerUser,
   loginUser,
+  googleAuth,
 };
