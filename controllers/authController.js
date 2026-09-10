@@ -1,7 +1,9 @@
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const User = require('../models/User');
+const Otp = require('../models/Otp');
 const { sendVerificationEmail } = require('../utils/emailService');
+const { sendOtpEmail } = require('../utils/sendEmail');
 const { OAuth2Client } = require('google-auth-library');
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -364,6 +366,106 @@ const googleAuth = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Request Registration with OTP
+ * @route   POST /api/auth/register-request
+ * @access  Public
+ */
+const registerRequest = async (req, res, next) => {
+  try {
+    const { name, email, password } = req.body;
+    
+    if (!name || !email || !password) {
+      res.status(400);
+      throw new Error('Please enter name, email, and password');
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ emailPhone: cleanEmail });
+    if (existingUser && existingUser.isEmailVerified) {
+      res.status(400);
+      throw new Error('User already exists with this email');
+    }
+
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Upsert OTP record
+    await Otp.findOneAndUpdate(
+      { email: cleanEmail },
+      { email: cleanEmail, otp, userData: { name, password } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    // Send email
+    await sendOtpEmail(cleanEmail, otp);
+
+    res.status(200).json({
+      success: true,
+      message: 'OTP sent successfully to your email'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Verify Registration OTP and Create User
+ * @route   POST /api/auth/verify-register-otp
+ * @access  Public
+ */
+const verifyRegisterOtp = async (req, res, next) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      res.status(400);
+      throw new Error('Email and OTP are required');
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+
+    // Find OTP record
+    const otpRecord = await Otp.findOne({ email: cleanEmail });
+    if (!otpRecord) {
+      res.status(400);
+      throw new Error('Invalid or expired OTP');
+    }
+
+    if (otpRecord.otp !== otp) {
+      res.status(400);
+      throw new Error('Invalid OTP');
+    }
+
+    // Create permanent user
+    const generatedUserId = uuidv4();
+    const newUser = await User.create({
+      userId: generatedUserId,
+      name: otpRecord.userData.name,
+      emailPhone: cleanEmail,
+      password: otpRecord.userData.password,
+      isEmailVerified: true,
+      isFirstTimeUser: true,
+    });
+
+    // Delete OTP record
+    await Otp.deleteOne({ email: cleanEmail });
+
+    const token = generateToken(newUser._id);
+
+    res.status(201).json({
+      success: true,
+      token,
+      isFirstTimeUser: newUser.isFirstTimeUser,
+      user: formatUserResponse(newUser),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   sendEmailOtp,
   verifyEmailOtp,
@@ -372,4 +474,6 @@ module.exports = {
   registerUser,
   loginUser,
   googleAuth,
+  registerRequest,
+  verifyRegisterOtp,
 };

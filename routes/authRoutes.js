@@ -7,7 +7,9 @@ const {
   loginRegister,
   registerUser,
   loginUser,
-  googleAuth
+  googleAuth,
+  registerRequest,
+  verifyRegisterOtp
 } = require('../controllers/authController');
 
 // OTP Email Verification Endpoints
@@ -19,6 +21,10 @@ router.post('/login-register', loginRegister);
 router.post('/register', registerUser);
 router.post('/login', loginUser);
 router.post('/google', googleAuth);
+
+// OTP-based registration flow endpoints
+router.post('/register-request', registerRequest);
+router.post('/verify-register-otp', verifyRegisterOtp);
 
 // Legacy/Compatibility endpoints
 router.post('/verify', loginOrVerify);
