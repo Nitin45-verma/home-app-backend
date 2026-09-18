@@ -336,18 +336,42 @@ const googleAuth = async (req, res, next) => {
       throw new Error('Google ID token is required / Google ID टोकन आवश्यक है');
     }
 
-    // Verify the Google ID token
+    // --- Detect token type ---
+    // ID tokens (JWT) have 3 dot-separated parts. Access tokens do not.
+    const isIdToken = googleToken.split('.').length === 3;
+
     let payload;
-    try {
-      const ticket = await client.verifyIdToken({
-        idToken: googleToken,
-        audience: process.env.GOOGLE_CLIENT_ID,
-      });
-      payload = ticket.getPayload();
-    } catch (verifyError) {
-      console.error('[googleAuth] Token verification failed:', verifyError.message);
-      res.status(400);
-      throw new Error(`Invalid or expired Google token: ${verifyError.message}`);
+
+    if (isIdToken) {
+      // ── Web GSI flow: Verify Google ID Token ──────────────────────
+      try {
+        const ticket = await client.verifyIdToken({
+          idToken: googleToken,
+          audience: process.env.GOOGLE_CLIENT_ID,
+        });
+        payload = ticket.getPayload();
+      } catch (verifyError) {
+        console.error('[googleAuth] Token verification failed:', verifyError.message);
+        res.status(400);
+        throw new Error(`Invalid or expired Google token: ${verifyError.message}`);
+      }
+    } else {
+      // ── Native expo-auth-session flow: Verify via Google userinfo ──
+      try {
+        const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: `Bearer ${googleToken}` },
+        });
+        if (!userInfoResponse.ok) {
+          res.status(400);
+          throw new Error('Invalid Google access token — userinfo fetch failed');
+        }
+        payload = await userInfoResponse.json();
+        // Normalize: userinfo uses 'sub', same as ID token payload
+      } catch (fetchError) {
+        console.error('[googleAuth] userinfo fetch failed:', fetchError.message);
+        res.status(400);
+        throw new Error(`Google access token verification failed: ${fetchError.message}`);
+      }
     }
 
     if (!payload) {
@@ -397,8 +421,6 @@ const googleAuth = async (req, res, next) => {
       user: formatUserResponse(user),
     });
   } catch (error) {
-    // Status code is already set by the inner blocks above (400 or 500).
-    // If somehow it got to here with 200 still set, default to 500 (server error).
     if (!res.headersSent) {
       const currentStatus = res.statusCode;
       if (!currentStatus || currentStatus === 200) {
